@@ -2,6 +2,7 @@ var express = require('express');
 var util = require('./lib/utility');
 var partials = require('express-partials');
 var bodyParser = require('body-parser');
+var session = require('express-session')
 
 
 var db = require('./app/config');
@@ -10,6 +11,7 @@ var User = require('./app/models/user');
 var Links = require('./app/collections/links');
 var Link = require('./app/models/link');
 var Click = require('./app/models/click');
+var bcrypt = require('bcrypt-nodejs');
 
 var app = express();
 
@@ -18,27 +20,106 @@ app.set('view engine', 'ejs');
 app.use(partials());
 // Parse JSON (uniform resource locators)
 app.use(bodyParser.json());
+// app.use(express.cookieParser('bobbafet'))
 // Parse forms (signup/login)
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(__dirname + '/public'));
+app.use(session({
+  secret: 'darthVader',
+  resave: false,
+  saveUninitialized: true
+}))
 
 
 app.get('/', 
 function(req, res) {
-  res.render('index');
+  restrict(req,res, function() {
+    res.render('index');
+  })
+  //req.api key
+  //true: render index
+  // false: render login
 });
 
 app.get('/create', 
 function(req, res) {
-  res.render('index');
+  restrict(req,res, function() {
+    res.render('create');
+  })
 });
 
 app.get('/links', 
 function(req, res) {
-  Links.reset().fetch().then(function(links) {
-    res.send(200, links.models);
-  });
+  restrict(req, res, function() {
+    Links.reset().fetch().then(function(links) {
+      res.send(200, links.models);
+    });
+    
+  })
 });
+
+app.get('/login', function(req, res) {
+  if(req.session.username){
+    res.redirect('/');
+  } else {
+    res.render('login');
+  }
+})
+
+app.get('/signup', function(req, res) {
+  if(req.session.username){
+    res.redirect('/');
+  } else {
+    res.render('signup');
+  }
+})
+
+app.post('/login', function(req, res) {
+  var username = req.body.username
+  var password = req.body.password;
+  var sess = req.session;
+  if(!username || !password) {
+    console.log('empty username or pass')
+    return res.redirect('/login');
+  }
+  bcrypt.hash(password, db.salt, null, function(err, hash){
+    if(err) return console.log("Hashing error", err);
+    new User({ username: username, password: hash }).fetch().then(function(found){
+      if(found){
+        sess.username = username;
+        return res.redirect('/index');
+      } else {
+        return res.redirect('/login'); 
+      }
+    });
+  });
+})
+
+app.post('/signup', function(req, res){
+  var username = req.body.username; 
+  var password = req.body.password;
+  var sess = req.session;
+  if(!username || !password) {
+    console.log('empty username or pass')
+    return res.redirect('/signup')
+  }  
+  new User({ username: username }).fetch().then(function(found){
+    if(found){
+      sess.username = username;
+      res.redirect('/')
+    } else {
+      var user = new User({
+        username: username,
+        password: password
+      });
+      user.save().then(function(newUser){
+        Users.add(newUser);
+        sess.username = username;
+        res.redirect('/')
+      });
+    }
+  });
+})
 
 app.post('/links', 
 function(req, res) {
@@ -107,6 +188,18 @@ app.get('/*', function(req, res) {
     }
   });
 });
+
+function restrict(req, res, next){
+  //console.log(req.session)
+  if(req.session && req.session.username){
+    next()//callback
+  } else {
+    //console.log('restricted no user redirect')
+    res.redirect('/login')
+  }
+}
+
+
 
 console.log('Shortly is listening on 4568');
 app.listen(4568);

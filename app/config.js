@@ -1,5 +1,6 @@
 var Bookshelf = require('bookshelf');
 var path = require('path');
+var bcrypt = require('bcrypt-nodejs');
 
 var db = Bookshelf.initialize({
   client: 'sqlite3',
@@ -41,6 +42,24 @@ db.knex.schema.hasTable('clicks').then(function(exists) {
   }
 });
 
+db.knex.schema.hasTable('users').then(function(exists) {
+  if (!exists) {
+    db.knex.schema.createTable('users', function (user) {
+      user.increments('id').primary();
+      user.string('username', 50)
+      user.string('password', 255)
+      // click.timestamps();
+    }).then(function (table) {
+      console.log('Created Table', table);
+    });
+  }
+});
+
+db.salt = null
+bcrypt.genSalt(5, function(err, salt) {
+  if(err) console.log('salt errorr: ', err)
+  db.salt = salt
+})
 /************************************************************/
 // Add additional schema definitions below
 /************************************************************/
