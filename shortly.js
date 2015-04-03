@@ -10,8 +10,11 @@ var Users = require('./app/collections/users');
 var User = require('./app/models/user');
 var Links = require('./app/collections/links');
 var Link = require('./app/models/link');
+var Salt = require('./app/models/salt')
+var Salts = require('./app/collections/salts')
 var Click = require('./app/models/click');
 var bcrypt = require('bcrypt-nodejs');
+var request = require('request')
 
 var app = express();
 
@@ -29,6 +32,28 @@ app.use(session({
   resave: false,
   saveUninitialized: true
 }))
+
+app.get('/githubauth', function(req, res) {
+  res.redirect('https://github.com/login/oauth/authorize?client_id=42c2cd4cc993af55b6fd')
+})
+
+app.get('/authcb', function(req, res) {
+  request.post('https://github.com/login/oauth/access_token',
+    {form:{
+      client_id: '42c2cd4cc993af55b6fd',
+      client_secret: '78616bcbcd27ca05230490ad7b5595cd2e493ef4',
+      code: req.query.code
+    }}, 
+    function(err, response, body) {
+      var token = body.split('&')[0]
+      token = token.split('=')[1]
+      debugger
+      request.get('https://github.com/api/v2/json/user/show?access_token=' + token,
+      function(err, response, body) {
+        debugger
+      })
+    })
+})
 
 
 app.get('/', 
@@ -74,6 +99,11 @@ app.get('/signup', function(req, res) {
   }
 })
 
+app.get('/logout', function(req, res){
+  req.session.username = "";
+  res.redirect('/login');
+});
+
 app.post('/login', function(req, res) {
   var username = req.body.username
   var password = req.body.password;
@@ -82,16 +112,18 @@ app.post('/login', function(req, res) {
     console.log('empty username or pass')
     return res.redirect('/login');
   }
-  bcrypt.hash(password, db.salt, null, function(err, hash){
-    if(err) return console.log("Hashing error", err);
-    new User({ username: username, password: hash }).fetch().then(function(found){
-      if(found){
-        sess.username = username;
-        return res.redirect('/index');
-      } else {
-        return res.redirect('/login'); 
-      }
-    });
+  new User({ username: username }).fetch().then(function(found){
+    if(found){
+      var hash = bcrypt.compare(password, found.attributes.password, function(err, correct) {
+        if(err) res.redirect('/login')
+        if(correct) {
+          sess.username = username;
+          return res.redirect('/index');
+        } else res.redirect('/login')
+      })
+    } else {
+      return res.redirect('/login'); 
+    }
   });
 })
 
@@ -108,11 +140,10 @@ app.post('/signup', function(req, res){
       sess.username = username;
       res.redirect('/')
     } else {
-      var user = new User({
+      new User({
         username: username,
         password: password
-      });
-      user.save().then(function(newUser){
+      }).save().then(function(newUser){
         Users.add(newUser);
         sess.username = username;
         res.redirect('/')
@@ -190,11 +221,9 @@ app.get('/*', function(req, res) {
 });
 
 function restrict(req, res, next){
-  //console.log(req.session)
   if(req.session && req.session.username){
     next()//callback
   } else {
-    //console.log('restricted no user redirect')
     res.redirect('/login')
   }
 }

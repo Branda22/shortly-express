@@ -1,4 +1,6 @@
 var db = require('../config');
+var Salt = require('./salt')
+var Salts = require('../collections/salts')
 var bcrypt = require('bcrypt-nodejs');
 var Promise = require('bluebird');
 
@@ -11,11 +13,8 @@ var User = db.Model.extend({
     this.on('creating', function(model, attrs, options) {
       var username = model.get('username');
       var password = model.get('password');
-      bcrypt.hash(password, db.salt, null, function(err, hash) {
-        if(err) console.log('hashing err: ',err)
-        model.set('password', hash);
-        model.set('username', username)
-      })
+      var hash = bcrypt.hashSync(password, bcrypt.genSaltSync()) 
+      model.set('password', hash);
     })
   }
 });

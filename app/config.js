@@ -55,11 +55,24 @@ db.knex.schema.hasTable('users').then(function(exists) {
   }
 });
 
-db.salt = null
-bcrypt.genSalt(5, function(err, salt) {
-  if(err) console.log('salt errorr: ', err)
-  db.salt = salt
-})
+
+db.knex.schema.hasTable('salts').then(function(exists){
+  if(!exists){
+    db.knex.schema.createTable('salts', function (salt){
+      salt.increments('id').primary();
+      salt.string('username', 50);
+      salt.string('salt', 255);
+    }).then(function (table){
+      console.log('Created Table', table);
+    });
+  }
+});
+
+// db.salt = null
+// bcrypt.genSalt(5, function(err, salt) {
+//   if(err) console.log('salt errorr: ', err)
+//   db.salt = salt
+// })
 /************************************************************/
 // Add additional schema definitions below
 /************************************************************/
